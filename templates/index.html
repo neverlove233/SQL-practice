@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL 练习平台</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/codemirror.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme-dracula.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme-material-palenight.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme-material-darker.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme-monokai.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme-eclipse.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<script>/* 页面渲染前应用上次选择的主题，避免闪烁 */
+document.body.setAttribute("data-theme", localStorage.getItem("sql-theme") || "blue");</script>
+<header>
+  <div class="logo">SQL</div>
+  <div class="title-wrap">
+    <h1>SQL 练习平台</h1>
+    <p>上传 Excel 即刻开练 · 内置示例数据 · 数据不保存，重启即重置</p>
+  </div>
+  <div class="actions">
+    <select id="themeSelect" class="theme-select" title="切换视觉主题">
+      <option value="blue">🌊 深邃蓝</option>
+      <option value="purple">🔮 暗夜紫</option>
+      <option value="green">🌿 翡翠绿</option>
+      <option value="amber">🍁 暖阳橙</option>
+      <option value="light">☀️ 明亮白</option>
+      <option value="sunset">🌇 落日余晖</option>
+      <option value="cyber">🌃 赛博霓虹</option>
+      <option value="candy">🍬 糖果缤纷</option>
+      <option value="ocean">🌀 深海渐变</option>
+    </select>
+    <button id="docBtn" class="btn">📖 SQL 文档</button>
+    <button id="uploadBtn" class="btn btn-accent">📤 上传 Excel</button>
+    <button id="resetBtn" class="btn">🔄 重置数据库</button>
+    <button id="cacheBtn" class="btn" title="仅清理浏览器中本网站的缓存数据，不影响数据库">🧹 清理缓存</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="tabs">
+      <button class="tab active" data-tab="tables">📊 数据表</button>
+      <button class="tab" data-tab="exercises">📝 练习题</button>
+    </div>
+    <div id="tab-tables" class="tab-panel">
+      <div id="tableList" class="table-list"></div>
+      <div class="drop-hint">💡 将 .xlsx 文件拖拽到页面任意位置即可导入<br>第一行为列名，其余为数据<br>导入时可自定义表名</div>
+    </div>
+    <div id="tab-exercises" class="tab-panel hidden">
+      <div id="exerciseList"></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="card editor-card">
+      <div class="card-toolbar">
+        <span class="card-title">⌨️ SQL 编辑器</span>
+        <div class="toolbar-btns">
+          <button id="copyBtn" class="btn btn-sm" title="复制编辑器中的 SQL">📋 复制</button>
+          <button id="clearBtn" class="btn btn-sm">清空</button>
+          <button id="runBtn" class="btn btn-sm btn-run">▶ 运行&nbsp;&nbsp;Ctrl+Enter</button>
+        </div>
+      </div>
+      <textarea id="sqlInput">SELECT * FROM employees;</textarea>
+    </div>
+
+    <div class="splitter" id="splitter" title="拖拽调整编辑器高度 · 双击复位"><span></span></div>
+
+    <div class="card result-card">
+      <div class="card-toolbar">
+        <span class="card-title">📋 执行结果</span>
+        <span class="result-tools">
+          <button id="allRowsBtn" class="btn btn-sm" title="开启后查询不限 500 行，显示全部结果">全部行</button>
+          <span id="statusBar" class="status-bar"></span>
+        </span>
+      </div>
+      <div id="resultBox" class="result-box">
+        <div class="placeholder">点击「运行」或按 Ctrl+Enter 执行 SQL</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- SQL 文档弹窗 -->
+<div id="docModal" class="modal-overlay">
+  <div class="modal-panel doc-panel">
+    <div class="modal-header">
+      <span class="modal-title">📖 SQL 常用语法文档</span>
+      <input id="docSearch" class="doc-search" placeholder="🔍 搜索语法，如：join / 分组 / 去重 / 日期…">
+      <button id="docClose" class="btn btn-sm">✕ 关闭</button>
+    </div>
+    <div id="docCats" class="doc-cats"></div>
+    <div id="docList" class="doc-list"></div>
+  </div>
+</div>
+
+<!-- 上传命名弹窗 -->
+<div id="nameModal" class="modal-overlay">
+  <div class="modal-panel name-panel">
+    <div class="modal-header">
+      <span class="modal-title">📤 导入 Excel</span>
+    </div>
+    <div class="name-body">
+      <p class="name-file">文件：<span id="uploadFileName"></span></p>
+      <label class="name-label" for="tableNameInput">在数据库中使用的表名（第一行将作为列名）：</label>
+      <input id="tableNameInput" class="name-input" placeholder="输入表名，支持中文">
+      <p class="name-tip">💡 导入后可用 <code>SELECT * FROM 表名;</code> 查询</p>
+    </div>
+    <div class="name-btns">
+      <button id="nameCancel" class="btn">取消</button>
+      <button id="nameConfirm" class="btn btn-run">✔ 导入</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="dropOverlay"><div class="drop-box">📂 松开鼠标，导入 Excel 文件</div></div>
+
+<script src="{{ url_for('static', filename='vendor/codemirror/codemirror.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/codemirror/mode-sql.min.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script src="{{ url_for('static', filename='sqldoc-data.js') }}"></script>
+<script src="{{ url_for('static', filename='sqldoc.js') }}"></script>
+</body>
+</html>
